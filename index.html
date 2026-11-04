@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Grey Boxes</title>
+<style>
+:root{--bg:#9a9a9a;--box:#b4b4b4;--edge:#7d7d7d;--text:#2b2b2b;--hint:#6a6a6a;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#3a3a3a;--box:#4d4d4d;--edge:#2c2c2c;--text:#e2e2e2;--hint:#a0a0a0;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#3a3a3a;--box:#4d4d4d;--edge:#2c2c2c;--text:#e2e2e2;--hint:#a0a0a0;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:1.3rem;font-weight:600;margin:0 0 4px}
+p.hint{margin:0 0 24px;color:var(--hint);font-size:.9rem}
+.row{margin-bottom:14px}
+input{width:100%;box-sizing:border-box;padding:12px 14px;font:inherit;color:var(--text);background:var(--box);border:1px solid var(--edge);border-radius:8px;outline:none}
+input:focus{border-color:var(--text)}
+input::placeholder{color:var(--hint)}
+.media{margin-top:8px}
+.media video,.media iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:8px;background:#000;display:block}
+</style>
+</head>
+<body>
+<main>
+  <h1>Grey boxes</h1>
+  <p class="hint">Type in a box and a new one appears. Paste any video link (a YouTube page, Vimeo, a direct video file, or any other URL) and it plays automatically, muted, because browsers require that for autoplay.</p>
+  <div id="list"></div>
+</main>
+<script>
+var list = document.getElementById('list');
+
+function videoFor(url) {
+  var u;
+  if (!/^[a-z]+:\/\//i.test(url)) url = 'https://' + url;
+  try { u = new URL(url); } catch (e) { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  var host = u.hostname.replace(/^www\./, ''), id = null, m;
+  if (host === 'youtu.be') id = u.pathname.slice(1);
+  else if (/(^|\.)youtube(-nocookie)?\.com$/.test(host)) {
+    if (u.pathname === '/watch') id = u.searchParams.get('v');
+    else if ((m = u.pathname.match(/^\/(shorts|embed|live|v)\/([\w-]+)/))) id = m[2];
+  }
+  if (id && /^[\w-]{6,}$/.test(id)) {
+    var f = document.createElement('iframe');
+    f.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1&mute=1&playsinline=1&loop=1&playlist=' + id;
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.allowFullscreen = true;
+    f.referrerPolicy = 'strict-origin-when-cross-origin';
+    return f;
+  }
+  if (host === 'vimeo.com' && (m = u.pathname.match(/\/(\d+)/))) {
+    var v = document.createElement('iframe');
+    v.src = 'https://player.vimeo.com/video/' + m[1] + '?autoplay=1&muted=1&loop=1';
+    v.allow = 'autoplay; fullscreen; picture-in-picture';
+    v.allowFullscreen = true;
+    v.referrerPolicy = 'strict-origin-when-cross-origin';
+    return v;
+  }
+  if (/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(u.pathname)) {
+    var el = document.createElement('video');
+    el.src = url; el.autoplay = true; el.muted = true; el.loop = true;
+    el.controls = true; el.playsInline = true;
+    return el;
+  }
+  if (host.indexOf('.') > 0) {
+    var g = document.createElement('video');
+    g.src = url; g.autoplay = true; g.muted = true; g.loop = true;
+    g.controls = true; g.playsInline = true;
+    g.addEventListener('error', function () {
+      var a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = 'Couldn’t play this here. Open the link ↗';
+      a.style.color = 'inherit';
+      if (g.parentNode) g.parentNode.replaceChild(a, g);
+    });
+    return g;
+  }
+  return null;
+}
+
+function addRow() {
+  var row = document.createElement('div');
+  row.className = 'row';
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Type something or paste a video link…';
+  var media = document.createElement('div');
+  media.className = 'media';
+  row.appendChild(input);
+  row.appendChild(media);
+  list.appendChild(row);
+
+  var timer, shown = '';
+  function update() {
+    var val = input.value.trim();
+    if (val === shown) return;
+    shown = val;
+    media.innerHTML = '';
+    var el = val ? videoFor(val) : null;
+    if (el) media.appendChild(el);
+  }
+  input.addEventListener('input', function () {
+    var last = list.lastElementChild;
+    if (last === row && input.value.trim() !== '') addRow();
+    clearTimeout(timer);
+    timer = setTimeout(update, 400);
+  });
+  input.addEventListener('change', update);
+  input.addEventListener('paste', function () { setTimeout(update, 0); });
+  return input;
+}
+
+addRow().focus();
+</script>
+</body>
+</html>
