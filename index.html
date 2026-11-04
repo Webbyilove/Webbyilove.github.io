@@ -69,7 +69,7 @@ function parse(url) {
   if (/(^|\.)pornhub\.com$/.test(host)) {
     var key = u.searchParams.get('viewkey');
     if (!key && (m = u.pathname.match(/^\/embed\/(\w+)/))) key = m[1];
-    if (key && /^\w+$/.test(key)) return {type: 'ph', url: url, src: 'https://www.pornhub.com/embed/' + key};
+    if (key && /^\w+$/.test(key)) return {type: 'ph', url: url, src: 'https://www.pornhub.com/embed/' + key + '?autoplay=1&muted=1'};
   }
   if (/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(u.pathname)) return {type: 'file', url: url, src: url};
   if (host.indexOf('.') > 0) return {type: 'file', url: url, src: url, guess: true};
