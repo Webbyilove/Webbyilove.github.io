@@ -11,119 +11,162 @@ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:en
 :root[data-theme="dark"]{--bg:#3a3a3a;--box:#4d4d4d;--edge:#2c2c2c;--text:#e2e2e2;--hint:#a0a0a0;color-scheme:dark}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:640px;margin:0 auto;padding:32px 16px 64px}
+header,.layout{max-width:1200px;margin:0 auto;padding:0 16px}
+header{padding-top:28px}
 h1{font-size:1.3rem;font-weight:600;margin:0 0 4px}
-p.hint{margin:0 0 24px;color:var(--hint);font-size:.9rem}
-.row{margin-bottom:14px}
-input{width:100%;box-sizing:border-box;padding:12px 14px;font:inherit;color:var(--text);background:var(--box);border:1px solid var(--edge);border-radius:8px;outline:none}
+p.hint{margin:0 0 20px;color:var(--hint);font-size:.9rem}
+.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:24px;padding-bottom:64px;align-items:start}
+.stage{position:sticky;top:16px;z-index:2}
+.screen{aspect-ratio:16/9;width:100%;background:var(--box);border:1px solid var(--edge);border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--hint);text-align:center;padding:16px;box-sizing:border-box}
+.screen video,.screen iframe{width:100%;height:100%;border:0;background:#000;display:block;margin:-16px}
+.bar{display:flex;gap:10px;align-items:center;margin-top:10px;color:var(--hint);font-size:.9rem}
+button{font:inherit;color:var(--text);background:var(--box);border:1px solid var(--edge);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--text)}
+.row{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+input{flex:1;min-width:0;box-sizing:border-box;padding:12px 14px;font:inherit;color:var(--text);background:var(--box);border:1px solid var(--edge);border-radius:8px;outline:none}
 input:focus{border-color:var(--text)}
 input::placeholder{color:var(--hint)}
-.media{margin-top:8px}
-.media video,.media iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:8px;background:#000;display:block}
+.row.now input{border-color:var(--text)}
+.badge{font-size:.78rem;color:var(--hint);white-space:nowrap;min-width:64px;text-align:center}
+.badge button{padding:4px 8px;font-size:.78rem}
+@media (max-width:820px){.layout{grid-template-columns:1fr;gap:16px}}
 </style>
 </head>
 <body>
-<main>
+<header>
   <h1>Grey boxes</h1>
-  <p class="hint">Type in a box and a new one appears. Paste any video link (a YouTube page, Vimeo, a direct video file, or any other URL) and it plays automatically, muted, because browsers require that for autoplay.</p>
-  <div id="list"></div>
-</main>
+  <p class="hint">Type in a box and a new one appears. Paste video links (YouTube, Vimeo, Pornhub, direct files or other URLs) and they play in order on the left, muted because browsers require that for autoplay.</p>
+</header>
+<div class="layout">
+  <section class="stage">
+    <div class="screen" id="screen">Paste a video link in a box to start</div>
+    <div class="bar"><button id="next" type="button">Next ▸</button><span id="status"></span></div>
+  </section>
+  <section id="list"></section>
+</div>
 <script>
 var list = document.getElementById('list');
+var screen_ = document.getElementById('screen');
+var statusEl = document.getElementById('status');
+var rows = [], current = null, activeFrame = null, activeKind = null;
 
-function videoFor(url) {
-  var u;
+function parse(url) {
+  var u, m, id = null;
   if (!/^[a-z]+:\/\//i.test(url)) url = 'https://' + url;
   try { u = new URL(url); } catch (e) { return null; }
   if (!/^https?:$/.test(u.protocol)) return null;
-  var host = u.hostname.replace(/^www\./, ''), id = null, m;
+  var host = u.hostname.replace(/^www\./, '');
   if (host === 'youtu.be') id = u.pathname.slice(1);
   else if (/(^|\.)youtube(-nocookie)?\.com$/.test(host)) {
     if (u.pathname === '/watch') id = u.searchParams.get('v');
     else if ((m = u.pathname.match(/^\/(shorts|embed|live|v)\/([\w-]+)/))) id = m[2];
   }
-  if (id && /^[\w-]{6,}$/.test(id)) {
-    var f = document.createElement('iframe');
-    f.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1&mute=1&playsinline=1&loop=1&playlist=' + id;
-    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
-    f.allowFullscreen = true;
-    f.referrerPolicy = 'strict-origin-when-cross-origin';
-    return f;
-  }
-  if (host === 'vimeo.com' && (m = u.pathname.match(/\/(\d+)/))) {
-    var v = document.createElement('iframe');
-    v.src = 'https://player.vimeo.com/video/' + m[1] + '?autoplay=1&muted=1&loop=1';
-    v.allow = 'autoplay; fullscreen; picture-in-picture';
-    v.allowFullscreen = true;
-    v.referrerPolicy = 'strict-origin-when-cross-origin';
-    return v;
-  }
+  if (id && /^[\w-]{6,}$/.test(id))
+    return {type: 'yt', url: url, src: 'https://www.youtube.com/embed/' + id + '?autoplay=1&mute=1&playsinline=1&enablejsapi=1'};
+  if (host === 'vimeo.com' && (m = u.pathname.match(/\/(\d+)/)))
+    return {type: 'vimeo', url: url, src: 'https://player.vimeo.com/video/' + m[1] + '?autoplay=1&muted=1'};
   if (/(^|\.)pornhub\.com$/.test(host)) {
     var key = u.searchParams.get('viewkey');
     if (!key && (m = u.pathname.match(/^\/embed\/(\w+)/))) key = m[1];
-    if (key && /^\w+$/.test(key)) {
-      var p = document.createElement('iframe');
-      p.src = 'https://www.pornhub.com/embed/' + key;
-      p.allow = 'autoplay; fullscreen';
-      p.allowFullscreen = true;
-      p.referrerPolicy = 'strict-origin-when-cross-origin';
-      return p;
-    }
+    if (key && /^\w+$/.test(key)) return {type: 'ph', url: url, src: 'https://www.pornhub.com/embed/' + key};
   }
-  if (/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(u.pathname)) {
-    var el = document.createElement('video');
-    el.src = url; el.autoplay = true; el.muted = true; el.loop = true;
-    el.controls = true; el.playsInline = true;
-    return el;
-  }
-  if (host.indexOf('.') > 0) {
-    var g = document.createElement('video');
-    g.src = url; g.autoplay = true; g.muted = true; g.loop = true;
-    g.controls = true; g.playsInline = true;
-    g.addEventListener('error', function () {
-      var a = document.createElement('a');
-      a.href = url; a.target = '_blank'; a.rel = 'noopener';
-      a.textContent = 'Couldn’t play this here. Open the link ↗';
-      a.style.color = 'inherit';
-      if (g.parentNode) g.parentNode.replaceChild(a, g);
-    });
-    return g;
-  }
+  if (/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(u.pathname)) return {type: 'file', url: url, src: url};
+  if (host.indexOf('.') > 0) return {type: 'file', url: url, src: url, guess: true};
   return null;
 }
 
-function addRow() {
-  var row = document.createElement('div');
-  row.className = 'row';
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = 'Type something or paste a video link…';
-  var media = document.createElement('div');
-  media.className = 'media';
-  row.appendChild(input);
-  row.appendChild(media);
-  list.appendChild(row);
+function stage(el) { screen_.innerHTML = ''; screen_.style.padding = ''; if (typeof el === 'string') screen_.textContent = el; else screen_.appendChild(el); }
 
-  var timer, shown = '';
+function play(r) {
+  current = r; activeFrame = null; activeKind = r.desc.type;
+  var d = r.desc, el;
+  if (d.type === 'file') {
+    el = document.createElement('video');
+    el.src = d.src; el.autoplay = true; el.muted = true; el.controls = true; el.playsInline = true;
+    el.addEventListener('ended', next);
+    el.addEventListener('error', function () {
+      var a = document.createElement('a');
+      a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'inherit';
+      a.textContent = 'Couldn\u2019t play this here. Open the link \u2197';
+      stage(a);
+    });
+  } else {
+    el = document.createElement('iframe');
+    el.src = d.src;
+    el.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    el.allowFullscreen = true;
+    el.referrerPolicy = 'strict-origin-when-cross-origin';
+    activeFrame = el;
+    el.addEventListener('load', function () {
+      try {
+        if (d.type === 'yt') el.contentWindow.postMessage(JSON.stringify({event: 'listening', id: 1, channel: 'widget'}), '*');
+        if (d.type === 'vimeo') el.contentWindow.postMessage(JSON.stringify({method: 'addEventListener', value: 'finish'}), '*');
+      } catch (e) {}
+    });
+  }
+  stage(el);
+  if (d.type === 'file') screen_.style.padding = '0';
+  refresh();
+}
+
+window.addEventListener('message', function (e) {
+  if (!activeFrame || e.source !== activeFrame.contentWindow) return;
+  var data = e.data;
+  if (typeof data === 'string') { try { data = JSON.parse(data); } catch (x) { return; } }
+  if (!data) return;
+  if (activeKind === 'yt' && (data.event === 'onStateChange' && data.info === 0 ||
+      data.event === 'infoDelivery' && data.info && data.info.playerState === 0)) next();
+  if (activeKind === 'vimeo' && data.event === 'finish') next();
+});
+
+function queue() { return rows.filter(function (r) { return r.desc; }); }
+
+function next() {
+  var q = queue(), i = q.indexOf(current), n = q[i + 1];
+  if (n) play(n);
+  else { current = null; activeFrame = null; stage(q.length ? 'Reached the end of the list' : 'Paste a video link in a box to start'); refresh(); }
+}
+
+function refresh() {
+  var q = queue();
+  rows.forEach(function (r) {
+    r.el.classList.toggle('now', r === current);
+    r.badge.innerHTML = '';
+    if (!r.desc) return;
+    if (r === current) r.badge.textContent = 'Playing';
+    else { var b = document.createElement('button'); b.type = 'button'; b.textContent = '#' + (q.indexOf(r) + 1) + ' \u25B8'; b.onclick = function () { play(r); }; r.badge.appendChild(b); }
+  });
+  statusEl.textContent = q.length ? q.length + (q.length === 1 ? ' video' : ' videos') + ' in the list' : '';
+}
+
+function addRow() {
+  var el = document.createElement('div'); el.className = 'row';
+  var input = document.createElement('input'); input.type = 'text';
+  input.placeholder = 'Type something or paste a video link\u2026';
+  var badge = document.createElement('span'); badge.className = 'badge';
+  el.appendChild(input); el.appendChild(badge); list.appendChild(el);
+  var r = {el: el, input: input, badge: badge, desc: null, shown: ''};
+  rows.push(r);
+  var timer;
   function update() {
     var val = input.value.trim();
-    if (val === shown) return;
-    shown = val;
-    media.innerHTML = '';
-    var el = val ? videoFor(val) : null;
-    if (el) media.appendChild(el);
+    if (val === r.shown) return;
+    r.shown = val;
+    r.desc = val ? parse(val) : null;
+    if (r === current) { if (r.desc) play(r); else next(); }
+    else if (!current && r.desc) play(r);
+    refresh();
   }
   input.addEventListener('input', function () {
-    var last = list.lastElementChild;
-    if (last === row && input.value.trim() !== '') addRow();
-    clearTimeout(timer);
-    timer = setTimeout(update, 400);
+    if (rows[rows.length - 1] === r && input.value.trim() !== '') addRow();
+    clearTimeout(timer); timer = setTimeout(update, 400);
   });
   input.addEventListener('change', update);
   input.addEventListener('paste', function () { setTimeout(update, 0); });
   return input;
 }
 
+document.getElementById('next').onclick = function () { if (current) next(); else { var q = queue(); if (q.length) play(q[0]); } };
 addRow().focus();
 </script>
 </body>
