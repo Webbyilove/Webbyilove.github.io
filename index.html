@@ -58,6 +58,18 @@ function videoFor(url) {
     v.referrerPolicy = 'strict-origin-when-cross-origin';
     return v;
   }
+  if (/(^|\.)pornhub\.com$/.test(host)) {
+    var key = u.searchParams.get('viewkey');
+    if (!key && (m = u.pathname.match(/^\/embed\/(\w+)/))) key = m[1];
+    if (key && /^\w+$/.test(key)) {
+      var p = document.createElement('iframe');
+      p.src = 'https://www.pornhub.com/embed/' + key;
+      p.allow = 'autoplay; fullscreen';
+      p.allowFullscreen = true;
+      p.referrerPolicy = 'strict-origin-when-cross-origin';
+      return p;
+    }
+  }
   if (/\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(u.pathname)) {
     var el = document.createElement('video');
     el.src = url; el.autoplay = true; el.muted = true; el.loop = true;
