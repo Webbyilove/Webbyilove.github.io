@@ -48,7 +48,8 @@ input::placeholder{color:var(--hint)}
 var list = document.getElementById('list');
 var screen_ = document.getElementById('screen');
 var statusEl = document.getElementById('status');
-var rows = [], current = null, activeFrame = null, activeKind = null;
+var rows = [], current = null, activeFrame = null, activeKind = null, advanced = false;
+function advance() { if (advanced) return; advanced = true; next(); }
 
 function parse(url) {
   var u, m, id = null;
@@ -78,7 +79,7 @@ function parse(url) {
 function stage(el) { screen_.innerHTML = ''; screen_.style.padding = ''; if (typeof el === 'string') screen_.textContent = el; else screen_.appendChild(el); }
 
 function play(r) {
-  current = r; activeFrame = null; activeKind = r.desc.type;
+  current = r; activeFrame = null; activeKind = r.desc.type; advanced = false;
   var d = r.desc, el;
   if (d.type === 'file') {
     el = document.createElement('video');
@@ -97,12 +98,18 @@ function play(r) {
     el.allowFullscreen = true;
     el.referrerPolicy = 'strict-origin-when-cross-origin';
     activeFrame = el;
-    el.addEventListener('load', function () {
+    var tries = 0;
+    var hello = setInterval(function () {
+      if (activeFrame !== el || ++tries > 30) { clearInterval(hello); return; }
       try {
-        if (d.type === 'yt') el.contentWindow.postMessage(JSON.stringify({event: 'listening', id: 1, channel: 'widget'}), '*');
-        if (d.type === 'vimeo') el.contentWindow.postMessage(JSON.stringify({method: 'addEventListener', value: 'finish'}), '*');
+        var w = el.contentWindow;
+        if (d.type === 'yt') {
+          w.postMessage(JSON.stringify({event: 'listening', id: 1, channel: 'widget'}), '*');
+          w.postMessage(JSON.stringify({event: 'command', func: 'addEventListener', args: ['onStateChange'], id: 1, channel: 'widget'}), '*');
+        }
+        if (d.type === 'vimeo') w.postMessage(JSON.stringify({method: 'addEventListener', value: 'finish'}), '*');
       } catch (e) {}
-    });
+    }, 500);
   }
   stage(el);
   if (d.type === 'file') screen_.style.padding = '0';
@@ -114,9 +121,10 @@ window.addEventListener('message', function (e) {
   var data = e.data;
   if (typeof data === 'string') { try { data = JSON.parse(data); } catch (x) { return; } }
   if (!data) return;
+  var inf = data.info || {};
   if (activeKind === 'yt' && (data.event === 'onStateChange' && data.info === 0 ||
-      data.event === 'infoDelivery' && data.info && data.info.playerState === 0)) next();
-  if (activeKind === 'vimeo' && data.event === 'finish') next();
+      data.event === 'infoDelivery' && (inf.playerState === 0 || (inf.duration > 0 && inf.currentTime > 1 && inf.currentTime >= inf.duration - 0.4)))) advance();
+  if (activeKind === 'vimeo' && (data.event === 'finish' || data.event === 'ended')) advance();
 });
 
 function queue() { return rows.filter(function (r) { return r.desc; }); }
